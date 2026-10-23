@@ -1,60 +1,71 @@
-# CIVICXON — Production Backend (FastAPI + PostgreSQL/PostGIS)
+# CIVICXON — Production Backend (FastAPI + PostgreSQL/PostGIS / SQLite)
 
-This directory contains the production-grade backend that the browser build mirrors 1:1.
-Entities, field names, state machine, allocation weights and AI provider contract are identical
-to the in-browser engine so the frontend can be pointed at either.
+The CIVICXON backend is a production-grade FastAPI service providing authoritative civic workflow management, deterministic worker dispatch, dynamic priority scoring, spatial/perceptual duplicate detection, and audit logging.
 
-## Quick start (Docker Compose)
-```powershell
-docker compose up --build          # db (postgis) + api (migrations + seed + uvicorn)
-# API docs: http://localhost:8000/api/docs
-```
+---
 
-## Manual setup (Windows PowerShell)
+## Key Capabilities (PRD Conformance)
+
+1. **Deterministic 7-Factor Dynamic Priority Engine** (`app/services/priority.py`):
+   - Computes 0–100 score and priority bands: `CRITICAL` (80–100), `HIGH` (60–79), `MEDIUM` (40–59), and `LOW` (0–39).
+   - Weighted factors: Defect Severity (25%), Road Classification / Hierarchy (20%), High-Risk Location / School-Hospital Proximity (20%), Public Multi-Report Escalation (15%), Age / Duration in Open State (10%), Repeat Recurrence History (5%), and Weather Exposure (5%).
+   - Explainable factor-by-factor breakdown returned on every ticket.
+   - Admin override with mandatory recorded reason (PRD Page 16).
+
+2. **Duplicate Detection: "One Physical Defect = One Master Issue"** (`app/services/workflow.py`):
+   - Combines Haversine spatial proximity (within 350m for streetlights, 100m for potholes), category matching, text similarity, and Pillow 16x16 perceptual aHash.
+   - Classifies matches into `SAME_ISSUE`, `POSSIBLE_DUPLICATE`, and `DISTINCT_ISSUE`.
+   - Linked citizen reports increment the master defect's `report_count` and escalate priority without dispatching duplicate crews.
+
+3. **Deterministic Worker Allocation Engine** (`app/services/allocation.py`):
+   - Hard eligibility gates: account active, exact skill (`road_maintenance` vs `streetlight_maintenance`), zone boundary coverage, availability (`AVAILABLE` / `BUSY`), and concurrency limit (`current_load < max_concurrent_jobs`).
+   - Auditable score ranking: Skill Match (45%) + Proximity (25%) + Current Workload (20%) + Availability (10%).
+
+4. **Human-in-the-Loop Verification Queue** (`app/routers/admin.py`, `worker.py`):
+   - Field crews submit after-repair photo evidence.
+   - Gemma 4 / heuristic engine provides advisory pre-check (`likely_resolved`, `not_resolved`, `uncertain`).
+   - Mandatory admin sign-off: Admin makes the binding decision (`APPROVED` → `VERIFIED`, or `REWORK_REQUESTED` → `REWORK_REQUIRED` with specific instructions).
+
+5. **Security & Server-Side RBAC**:
+   - Native `bcrypt` password hashing (`$2b$`) with 72-byte safe handling.
+   - Scoped queries: Citizens cannot view or modify other citizens' records; workers cannot start or view jobs not assigned to them (HTTP 403 verified).
+   - Rate limiting and failed-attempt tracking.
+   - Secure one-time first-admin bootstrap.
+
+---
+
+## Running the Backend
+
+### Windows PowerShell
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env        # edit DATABASE_URL / GEMMA_API_KEY
-docker compose up -d db            # or your own PostGIS instance
-alembic upgrade head               # runs migrations + CREATE EXTENSION postgis
-python -m scripts.seed             # departments, zones, demo users/workers/issues
-uvicorn app.main:app --reload --port 8000
+
+# Seed departments, zones, workers, and demo users:
+python scripts/seed.py
+
+# Run FastAPI server:
+uvicorn app.main:app --port 8000 --reload
+# Interactive API documentation: http://localhost:8000/api/docs
 ```
 
-## Commands (bash/macOS)
-```bash
-cd backend && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-alembic upgrade head && python -m scripts.seed
-uvicorn app.main:app --reload --port 8000
+### Automated Tests
+```powershell
+backend\.venv\Scripts\python -m pytest backend\tests
 ```
+13 end-to-end integration tests covering:
+- Authentication & RBAC enforcement
+- Citizen complaint creation & 7-factor priority calculation
+- Duplicate detection & citizen report linking
+- Worker job lifecycle & ownership guards
+- Admin priority override & mandatory audit logging
+- Verification review lifecycle & rework requests
 
-## API surface (OpenAPI: /api/docs)
-| Area | Endpoints |
-|---|---|
-| Auth | `POST /api/auth/register` · `POST /api/auth/login` · `POST /api/auth/bootstrap-admin` · `GET /api/auth/me` — JWT, bcrypt, lockout after 5 failures |
-| Citizen | `GET/POST /api/issues` (photo multipart) · `GET /api/issues/{id}` · `GET /api/issues/{id}/events` · `POST /api/issues/{id}/cancel` |
-| Worker | `GET /api/worker/jobs` · `POST /api/worker/jobs/{id}/start` · `POST /api/worker/jobs/{id}/evidence` (multipart, triggers AI verification) — ownership enforced |
-| Admin | `GET /api/admin/dashboard` · `POST /api/admin/issues/{id}/approve-review` (sets priority + auto-assigns) · `/reject` · `/auto-assign` · `/assign/{worker_id}` · `/merge/{target}` · `POST /api/admin/issues/{id}/verification` (APPROVED / REWORK_REQUESTED) · `GET /api/admin/analytics` |
-| Workers | `GET/POST /api/workers` · `PATCH /api/workers/{id}` · `POST /api/workers/{id}/active/{bool}` · `POST /api/workers/import` · `GET /api/workers/export` |
+---
 
-## Security model
-- Passwords: bcrypt via passlib. JWTs: python-jose, HS256, `JWT_SECRET` env.
-- Every mutating route declares its required role; worker routes additionally verify
-  `issue.assigned_worker_id == profile.id` (ownership), admin routes verify `role == admin`.
-- Status transitions validated by the shared state machine table (`models.VALID_TRANSITIONS`).
-- Uploads: content-type allowlist + 6 MB cap + extension cross-check; bytes live in
-  local `./uploads` (dev) or S3/MinIO (prod) — DB stores only object keys.
-- `bootstrap-admin` is one-time and self-disables once an admin exists.
-- Transactions: assignment + status change + event append + load bump are one DB transaction;
-  worker rows are selected FOR UPDATE during ranking to prevent capacity races.
-
-## Gemma 4
-Set `GEMMA_API_KEY` in `.env` (Google AI Studio → aistudio.google.com/apikey).
-Models: `gemma-4-26b-a4b-it` (default) / `gemma-4-31b-it`. Image input supported via inlineData.
-When unset, services return explicitly-labelled development stubs — never fake model output.
-
-## Demo accounts (after seed)
-`admin@civicxon.gov` · `citizen@civicxon.gov` · `worker@civicxon.gov` — password `Civicxon@2026` (development only).
+## Seed Accounts (Development Only)
+- Admin: `admin@civicxon.gov` / `Civicxon@2026`
+- Citizen: `citizen@civicxon.gov` / `Civicxon@2026`
+- Worker: `worker@civicxon.gov` / `Civicxon@2026`

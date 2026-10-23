@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: civicxon-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python scripts/seed.py
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        value: sqlite:///./civicxon.db
+      - key: GEMMA_API_KEY
+        sync: false
+      - key: GEMMA_MODEL
+        value: gemma-4-26b-a4b-it
+      - key: GEMMA_ENDPOINT
+        value: https://generativelanguage.googleapis.com/v1beta
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://sanskarmaurya952-cloud.github.io,http://localhost:5173,http://127.0.0.1:5173

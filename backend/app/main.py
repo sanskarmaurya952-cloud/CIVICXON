@@ -32,7 +32,15 @@ app.include_router(workers.router)
 app.include_router(worker.router)
 
 
+@app.get("/")
+@app.get("/health")
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "civicxon-api", "storage": settings.STORAGE_BACKEND,
-            "ai_provider": "gemma-4" if settings.GEMMA_API_KEY else "heuristic-dev"}
+    return {
+        "status": "ok",
+        "service": "civicxon-api",
+        "storage": settings.STORAGE_BACKEND,
+        "ai_provider": "gemma-4" if settings.GEMMA_API_KEY else "heuristic-dev",
+        "docs": "/api/docs",
+        "frontend": "https://sanskarmaurya952-cloud.github.io/CIVICXON/"
+    }

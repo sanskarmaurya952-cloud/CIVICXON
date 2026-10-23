@@ -23,8 +23,12 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     connectable = engine_from_config(config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        # enable PostGIS
-        connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # enable PostGIS if on PostgreSQL
+        if connection.dialect.name == "postgresql":
+            try:
+                connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+            except Exception:
+                pass
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

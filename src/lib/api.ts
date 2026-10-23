@@ -6,9 +6,17 @@
  * Manages JWT tokens, handles error parsing, request timeouts, and multipart uploads.
  */
 
+const isBrowser = typeof window !== 'undefined';
+const isLocalhost = isBrowser && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '[::1]'
+);
+
 export const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.PROD ? 'https://civicxon-api.onrender.com' : 'http://localhost:8000')
+  !isLocalhost
+    ? (import.meta.env.VITE_CLOUD_API_URL || 'https://civicxon-api.onrender.com')
+    : (import.meta.env.VITE_LOCAL_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
 ).replace(/\/$/, '');
 
 const TOKEN_STORAGE_KEY = 'civicxon_token';

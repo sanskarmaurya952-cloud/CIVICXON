@@ -33,7 +33,7 @@ export default function Landing() {
     <div className="min-h-screen bg-navy-950 text-white">
       {/* ─────────────── HERO ─────────────── */}
       <div className="relative isolate overflow-hidden">
-        <img src="/images/hero.jpg" alt="City arterial road maintained by the civic works department" className="absolute inset-0 -z-10 h-full w-full object-cover object-center" />
+        <img src="./images/hero.jpg" alt="City arterial road maintained by the civic works department" className="absolute inset-0 -z-10 h-full w-full object-cover object-center" />
         {/* Navy gradient for legibility */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-navy-950/95 via-navy-950/78 to-navy-950/25" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-navy-950 via-transparent to-navy-950/30" />
@@ -88,7 +88,7 @@ export default function Landing() {
                 <span className="font-mono2 text-[10px] font-semibold tracking-wider text-civic-gold">CX-2026-0001</span>
                 <span className="flex items-center gap-1.5 rounded-full bg-violet-400/20 px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-wider text-violet-300"><span className="pulse-dot h-1.5 w-1.5 rounded-full bg-violet-400" /> Verification</span>
               </div>
-              <img src="/images/seed/pothole_before.jpg" alt="Deep pothole reported on 100 Feet Road" className="mt-3 h-36 w-full rounded-xl object-cover ring-1 ring-white/10" />
+              <img src="./images/seed/pothole_before.jpg" alt="Deep pothole reported on 100 Feet Road" className="mt-3 h-36 w-full rounded-xl object-cover ring-1 ring-white/10" />
               <p className="mt-3 text-[12px] font-semibold leading-snug text-white">Deep pothole near the signal junction, 100 Feet Road, Indiranagar</p>
               <p className="mt-1 line-clamp-2 text-[10.5px] text-navy-100/65">AI severity <span className="text-amber-300">SEVERE</span> · Two-wheeler hazard · High-traffic corridor</p>
               <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-[9.5px] font-semibold uppercase tracking-wider text-navy-100/55">

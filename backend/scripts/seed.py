@@ -25,32 +25,38 @@ def seed():
 
     db = SessionLocal()
     try:
-        if db.query(models.User).first():
-            print("Database already seeded — skipping.")
+        if db.query(models.User).filter(models.User.email == "admin@civicxon.gov").first():
+            print("Database already seeded with demo accounts — skipping.")
             return
 
         print("Seeding CIVICXON database...")
 
         # Departments
-        dept_road = models.Department(
-            code="ROAD",
-            name="Road Maintenance Department",
-            handles=["pothole"],
-            description="Potholes, road subsidence, surface erosion, and asphalt defects.",
-            demo_integration=True,
-            contact_email="roads@civicxon.gov.demo",
-            head="Eng. Vikram Malhotra",
-        )
-        dept_street = models.Department(
-            code="STREET",
-            name="Streetlight Maintenance Department",
-            handles=["streetlight"],
-            description="Luminaire faults, light pole structural damage, wiring, and dark stretches.",
-            demo_integration=True,
-            contact_email="streetlights@civicxon.gov.demo",
-            head="Eng. Meena Krishnan",
-        )
-        db.add_all([dept_road, dept_street])
+        dept_road = db.query(models.Department).filter(models.Department.code == "ROAD").first()
+        if not dept_road:
+            dept_road = models.Department(
+                code="ROAD",
+                name="Road Maintenance Department",
+                handles=["pothole"],
+                description="Potholes, road subsidence, surface erosion, and asphalt defects.",
+                demo_integration=True,
+                contact_email="roads@civicxon.gov.demo",
+                head="Eng. Vikram Malhotra",
+            )
+            db.add(dept_road)
+
+        dept_street = db.query(models.Department).filter(models.Department.code == "STREET").first()
+        if not dept_street:
+            dept_street = models.Department(
+                code="STREET",
+                name="Streetlight Maintenance Department",
+                handles=["streetlight"],
+                description="Luminaire faults, light pole structural damage, wiring, and dark stretches.",
+                demo_integration=True,
+                contact_email="streetlights@civicxon.gov.demo",
+                head="Eng. Meena Krishnan",
+            )
+            db.add(dept_street)
         db.flush()
 
         # Zones
@@ -61,9 +67,11 @@ def seed():
             ("South", 12.9250, 77.5940),
             ("West", 12.9665, 77.5120),
         ]
+        existing_zone_names = {z.name for z in db.query(models.Zone).all()}
         for name, lat, lng in zones_data:
-            z = models.Zone(name=name, lat=lat, lng=lng, radius_km=4.0)
-            db.add(z)
+            if name not in existing_zone_names:
+                z = models.Zone(name=name, lat=lat, lng=lng, radius_km=4.0)
+                db.add(z)
         db.flush()
 
         # Accounts

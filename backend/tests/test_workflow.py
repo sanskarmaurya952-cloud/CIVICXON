@@ -43,3 +43,4 @@ def test_haversine_zero_and_positive():
 def test_text_similarity():
     assert text_similarity("deep pothole near the signal", "signal pothole deep") > 0.5
     assert text_similarity("completely unrelated words", "streetlight pole") == 0.0
+

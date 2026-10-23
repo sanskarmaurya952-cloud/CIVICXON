@@ -1,13 +1,12 @@
+import bcrypt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from .config import settings
 from .database import SessionLocal
 from . import models
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 MAX_ATTEMPTS = 5
@@ -15,11 +14,16 @@ LOCK_MINUTES = 10
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    pwd_bytes = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+    try:
+        pwd_bytes = password.encode("utf-8")[:72]
+        return bcrypt.checkpw(pwd_bytes, password_hash.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def issue_token(user: models.User) -> str:

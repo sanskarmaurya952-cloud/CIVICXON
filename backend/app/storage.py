@@ -77,3 +77,20 @@ def validate_image(filename: str, content_type: str, size: int) -> None:
     ext = Path(filename).suffix.lower()
     if ext not in {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}:
         raise ValueError("Extension does not match an allowed image type")
+
+
+def compute_phash(image_bytes: bytes) -> str | None:
+    """16x16 aHash (256-bit perceptual hash as 64-char hex string).
+    Matches the frontend perceptualHash algorithm in src/lib/config.ts.
+    """
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(image_bytes)).convert("L").resize((16, 16), Image.Resampling.LANCZOS)
+        pixels = list(img.getdata())
+        avg = sum(pixels) / len(pixels)
+        bits = "".join("1" if p >= avg else "0" for p in pixels)
+        hex_str = "".join(f"{int(bits[i:i+4], 2):x}" for i in range(0, len(bits), 4))
+        return hex_str
+    except Exception:
+        return None

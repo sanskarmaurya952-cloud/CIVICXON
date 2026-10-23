@@ -3,8 +3,8 @@ from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, JSON, Enum, Index, event,
 )
 from sqlalchemy.orm import declarative_base, relationship
-from geoalchemy2 import Geography
 import enum
+from .config import settings
 
 Base = declarative_base()
 
@@ -54,6 +54,16 @@ VALID_TRANSITIONS = {
 }
 
 
+def _get_spatial_col():
+    if settings.DATABASE_URL.startswith("postgres"):
+        try:
+            from geoalchemy2 import Geography
+            return Geography(geometry_type="POINT", srid=4326)
+        except Exception:
+            return String(64)
+    return String(64)
+
+
 class Department(Base):
     __tablename__ = "departments"
     id = Column(Integer, primary_key=True)
@@ -71,7 +81,9 @@ class Zone(Base):
     __tablename__ = "zones"
     id = Column(Integer, primary_key=True)
     name = Column(String(80), unique=True, nullable=False)
-    center = Column(Geography(geometry_type="POINT", srid=4326), nullable=False)
+    lat = Column(Float, nullable=False, default=12.9716)
+    lng = Column(Float, nullable=False, default=77.5946)
+    center = Column(_get_spatial_col(), nullable=True)
     radius_km = Column(Float, default=4.0)
 
 
@@ -89,6 +101,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
     worker_profile = relationship("WorkerProfile", back_populates="user", uselist=False)
+    citizen_reports = relationship("CitizenReport", back_populates="reporter")
 
 
 class WorkerProfile(Base):
@@ -103,7 +116,9 @@ class WorkerProfile(Base):
     max_concurrent_jobs = Column(Integer, default=3)
     rating = Column(Float, default=4.5)
     jobs_completed = Column(Integer, default=0)
-    base_location = Column(Geography(geometry_type="POINT", srid=4326), nullable=False)
+    base_lat = Column(Float, nullable=False, default=12.9716)
+    base_lng = Column(Float, nullable=False, default=77.5946)
+    base_location = Column(_get_spatial_col(), nullable=True)
     joined_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User", back_populates="worker_profile")
     department = relationship("Department", back_populates="workers")
@@ -117,14 +132,21 @@ class Issue(Base):
     description = Column(Text, nullable=False)
     status = Column(Enum(IssueStatus, name="issue_status"), default=IssueStatus.REPORTED, index=True)
     priority = Column(Enum(Priority, name="issue_priority"), default=Priority.MEDIUM, index=True)
+    priority_score = Column(Float, default=50.0, index=True)
+    priority_band = Column(String(16), default="MEDIUM", index=True)
+    priority_breakdown = Column(JSON, nullable=True)
+    priority_override = Column(JSON, nullable=True)
     priority_reason = Column(Text, nullable=True)
     reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     address = Column(String(320), default="")
-    location = Column(Geography(geometry_type="POINT", srid=4326), nullable=False)
+    lat = Column(Float, nullable=False, default=12.9716)
+    lng = Column(Float, nullable=False, default=77.5946)
+    location = Column(_get_spatial_col(), nullable=True)
     zone = Column(String(80), index=True)
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     assigned_worker_id = Column(Integer, ForeignKey("worker_profiles.id"), nullable=True, index=True)
     duplicate_of_id = Column(Integer, ForeignKey("issues.id"), nullable=True)
+    report_count = Column(Integer, default=1)
     ai_analysis = Column(JSON, nullable=True)
     rejected_reason = Column(Text, nullable=True)
     rework_count = Column(Integer, default=0)
@@ -134,14 +156,38 @@ class Issue(Base):
     started_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     verified_at = Column(DateTime, nullable=True)
+
     reporter = relationship("User", foreign_keys=[reporter_id])
     assigned_worker = relationship("WorkerProfile")
+    department = relationship("Department")
     media = relationship("Media", back_populates="issue", cascade="all, delete-orphan")
     events = relationship("IssueEvent", back_populates="issue", cascade="all, delete-orphan")
     assignments = relationship("Assignment", back_populates="issue")
+    citizen_reports = relationship("CitizenReport", back_populates="issue", cascade="all, delete-orphan")
+    verifications = relationship("VerificationReview", back_populates="issue", cascade="all, delete-orphan")
 
 
-Index("ix_issues_location", Issue.location, postgresql_using="gist")
+class CitizenReport(Base):
+    """PRD Page 3 & Page 11: One physical defect = One master issue.
+    Multiple citizen submissions link to the master issue as CitizenReport records.
+    """
+    __tablename__ = "citizen_reports"
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, ForeignKey("issues.id", ondelete="SET NULL"), nullable=True, index=True)
+    reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    ticket_no = Column(String(32), index=True, nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(Enum(IssueCategory, name="report_category"), nullable=False)
+    lat = Column(Float, nullable=False)
+    lng = Column(Float, nullable=False)
+    address = Column(String(320), default="")
+    media_storage_key = Column(String(512), nullable=True)
+    phash = Column(String(128), nullable=True)
+    status = Column(String(32), default="LINKED")  # ORIGINAL_MASTER | LINKED | PENDING_REVIEW | REJECTED
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    issue = relationship("Issue", back_populates="citizen_reports")
+    reporter = relationship("User", back_populates="citizen_reports")
 
 
 class Media(Base):
@@ -204,6 +250,7 @@ class VerificationReview(Base):
     admin_note = Column(Text, nullable=True)
     decided_at = Column(DateTime, nullable=True)
     decided_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    issue = relationship("Issue", back_populates="verifications")
 
 
 class Notification(Base):
@@ -216,3 +263,17 @@ class Notification(Base):
     read = Column(Boolean, default=False, index=True)
     at = Column(DateTime, default=datetime.utcnow)
     link = Column(String(255), nullable=True)
+
+
+class AuditLog(Base):
+    """PRD Page 11 & Page 13: Audit trail for administrative decisions, merges, priority overrides."""
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True)
+    action = Column(String(64), nullable=False, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    actor_name = Column(String(160), default="CivicXon System")
+    actor_role = Column(String(16), default="system")
+    target_type = Column(String(32), nullable=False, index=True)  # ISSUE | WORKER | USER | CONFIG
+    target_id = Column(Integer, nullable=True, index=True)
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: civicxon-db
+    environment:
+      POSTGRES_USER: civicxon
+      POSTGRES_PASSWORD: civicxon
+      POSTGRES_DB: civicxon
+    ports:
+      - "5432:5432"
+    volumes:
+      - civicxon_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U civicxon -d civicxon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: civicxon-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://civicxon:civicxon@db:5432/civicxon
+      JWT_SECRET: dev-only-change-me-in-prod
+      CORS_ORIGINS: http://localhost:5173,http://localhost:4173
+      STORAGE_BACKEND: local
+      GEMMA_API_KEY: ${GEMMA_API_KEY:-}
+      GEMMA_MODEL: gemma-4-26b-a4b-it
+      AUTO_ASSIGN: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - civicxon_uploads:/app/uploads
+
+volumes:
+  civicxon_pgdata:
+  civicxon_uploads:

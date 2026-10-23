@@ -1,0 +1,42 @@
+# dependencies & builds
+node_modules
+dist
+dist-ssr
+*.local
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# databases & storage
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+backend/uploads/
+
+# python backend
+__pycache__/
+*.pyc
+.venv/
+venv/
+backend/.venv/
+backend/venv/
+backend/.env
+
+# logs
+logs
+*.log
+npm-debug.log*
+
+# editor & os
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+gh.exe
+
+# test
+coverage/
